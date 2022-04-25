@@ -119,6 +119,8 @@ DynamicLibrary loadDylib(String name) {
   // If it can't find it, try looking at search paths provided by the system.
   name = _resolveLibUri(name) ?? name;
 
+  print('dylib name: $name');
+
   try {
     return Platform.isIOS
         ? DynamicLibrary.process()

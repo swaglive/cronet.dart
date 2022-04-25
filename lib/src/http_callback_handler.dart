@@ -5,6 +5,7 @@
 import 'dart:async';
 import 'dart:developer';
 import 'dart:ffi';
+import 'dart:io' as io;
 import 'dart:isolate';
 import 'dart:math' as m;
 import 'dart:typed_data';
@@ -13,6 +14,8 @@ import 'package:ffi/ffi.dart';
 
 import 'exceptions.dart';
 import 'globals.dart';
+import 'model/http_cookie.dart';
+import 'model/http_redirect_info.dart';
 import 'third_party/cronet/generated_bindings.dart';
 import 'wrapper/generated_bindings.dart' as wrpr;
 
@@ -36,6 +39,7 @@ class _CallbackRequestMessage {
 /// Handles every kind of callbacks that are invoked by messages and
 /// data that are sent by [NativePort] from native cronet library.
 class CallbackHandler {
+  final String httpMethod;
   final ReceivePort receivePort;
   final Pointer<wrpr.SampleExecutor> executor;
 
@@ -46,8 +50,20 @@ class CallbackHandler {
   /// Stream controller to allow consumption of data like [HttpClientResponse].
   final _controller = StreamController<List<int>>();
 
+  final Completer<void> isResponseStarted = Completer();
+
+  String _negotiatedProtocol = 'unknown';
+
+  final Map<String, List<String>> _headers = {};
+
+  int _statusCode = 200;
+
+  List<Cookie>? _cookies;
+
+  final List<RedirectInfo> _redirects = [];
+
   /// Registers the [NativePort] to the cronet side.
-  CallbackHandler(this.executor, this.receivePort);
+  CallbackHandler(this.httpMethod, this.executor, this.receivePort);
 
   /// [Stream] for [HttpClientResponse].
   Stream<List<int>> get stream {
@@ -56,6 +72,33 @@ class CallbackHandler {
 
   /// [Stream] controller for [HttpClientResponse].
   StreamController<List<int>> get controller => _controller;
+
+  String get negotiatedProtocol => _negotiatedProtocol;
+
+  Map<String, List<String>> get headers => _headers;
+
+  int get statusCode => _statusCode;
+
+  int get contentLength {
+    List<String> values = _headers['content-length'] ?? [];
+    return values.isEmpty ? 0 : (int.tryParse(values.first) ?? 0);
+  }
+
+  List<Cookie> get cookies {
+    List<Cookie>? cookies = _cookies;
+    if (cookies != null) return cookies;
+    cookies = [];
+    List<String>? values = headers[io.HttpHeaders.setCookieHeader];
+    if (values != null) {
+      for (final String value in values) {
+        cookies.add(Cookie.fromSetCookieValue(value));
+      }
+    }
+    _cookies = cookies;
+    return cookies;
+  }
+
+  List<RedirectInfo> get redirects => _redirects;
 
   // Clean up tasks for a request.
   //
@@ -86,6 +129,34 @@ class CallbackHandler {
     return true;
   }
 
+  void _getAllHeaders(Pointer<Cronet_UrlResponseInfo> info) {
+    if (info == nullptr) return;
+    final int size = cronet.Cronet_UrlResponseInfo_all_headers_list_size(info);
+    for (int i = 0; i < size; i++) {
+      final Pointer<Cronet_HttpHeader> header =
+          cronet.Cronet_UrlResponseInfo_all_headers_list_at(info, i);
+      final String name =
+          cronet.Cronet_HttpHeader_name_get(header).cast<Utf8>().toDartString();
+      final String value = cronet.Cronet_HttpHeader_value_get(header)
+          .cast<Utf8>()
+          .toDartString();
+      if (!_headers.containsKey(name)) {
+        _headers[name] = [value];
+      } else {
+        (_headers[name] ?? []).add(value);
+      }
+    }
+  }
+
+  void _getNegotiatedProtocol(Pointer<Cronet_UrlResponseInfo> info) {
+    if (info == nullptr) return;
+    final String protocol =
+        cronet.Cronet_UrlResponseInfo_negotiated_protocol_get(info)
+            .cast<Utf8>()
+            .toDartString();
+    _negotiatedProtocol = protocol;
+  }
+
   /// This listens to the messages sent by native cronet library.
   ///
   /// This also invokes the appropriate callbacks that are registered,
@@ -107,13 +178,18 @@ class CallbackHandler {
       switch (reqMessage.method) {
         case 'OnRedirectReceived':
           {
-            final newUrlPtr = Pointer.fromAddress(args[0]).cast<Utf8>();
-            log('New Location: '
-                '${newUrlPtr.toDartString()}');
-            malloc.free(newUrlPtr);
+            final Pointer<Utf8> newLocationPtr =
+                Pointer.fromAddress(args[0]).cast<Utf8>();
+            final int statusCode = args[1];
+            final Pointer<Utf8> statusTextPtf =
+                Pointer.fromAddress(args[3]).cast<Utf8>();
+
+            String newLocation = newLocationPtr.toDartString();
+
+            malloc.free(newLocationPtr);
             // If NOT a 3XX status code, throw Exception.
-            final status = statusChecker(args[1], Pointer.fromAddress(args[2]),
-                300, 399, () => cronet.Cronet_UrlRequest_Cancel(reqPtr));
+            final status = statusChecker(statusCode, statusTextPtf, 300, 399,
+                () => cronet.Cronet_UrlRequest_Cancel(reqPtr));
             if (!status) {
               break;
             }
@@ -123,6 +199,11 @@ class CallbackHandler {
                 cleanUpRequest(reqPtr, cleanUpClient);
                 throw UrlRequestError(res);
               }
+              _redirects.add(RedirectInfoImpl(
+                statusCode,
+                httpMethod,
+                Uri.parse(newLocation),
+              ));
               maxRedirects--;
             } else {
               cronet.Cronet_UrlRequest_Cancel(reqPtr);
@@ -133,15 +214,24 @@ class CallbackHandler {
         // When server has sent the initial response.
         case 'OnResponseStarted':
           {
+            final int statusCode = args[0];
+            final Pointer<Cronet_UrlResponseInfo> infoPtr =
+                Pointer.fromAddress(args[1]);
+            final Pointer<Cronet_Buffer> bufferPtr =
+                Pointer.fromAddress(args[2]);
+            final Pointer<Utf8> statusTextPtr =
+                Pointer.fromAddress(args[3]).cast<Utf8>();
+
+            _statusCode = statusCode;
+            _getAllHeaders(infoPtr);
+            _resumeResponse();
             // If NOT a 1XX or 2XX status code, throw Exception.
-            final status = statusChecker(args[0], Pointer.fromAddress(args[2]),
-                100, 299, () => cronet.Cronet_UrlRequest_Cancel(reqPtr));
-            log('Response started');
+            final status = statusChecker(statusCode, statusTextPtr, 100, 299,
+                () => cronet.Cronet_UrlRequest_Cancel(reqPtr));
             if (!status) {
               break;
             }
-            final res = cronet.Cronet_UrlRequest_Read(
-                reqPtr, Pointer.fromAddress(args[1]).cast<Cronet_Buffer>());
+            final res = cronet.Cronet_UrlRequest_Read(reqPtr, bufferPtr);
             if (res != Cronet_RESULT.Cronet_RESULT_SUCCESS) {
               throw UrlRequestError(res);
             }
@@ -154,22 +244,26 @@ class CallbackHandler {
         // data received and no of bytes read.
         case 'OnReadCompleted':
           {
-            final request = Pointer<Cronet_UrlRequest>.fromAddress(args[0]);
-            final buffer = Pointer<Cronet_Buffer>.fromAddress(args[2]);
-            final bytesRead = args[3];
+            final Pointer<Cronet_UrlRequest> requestPtr =
+                Pointer.fromAddress(args[0]);
+            final int statusCode = args[1];
+            final Pointer<Cronet_Buffer> bufferPtr =
+                Pointer.fromAddress(args[3]);
+            final int bytesRead = args[4];
+            final Pointer<Utf8> statusTextPtr =
+                Pointer.fromAddress(args[5]).cast<Utf8>();
 
-            log('Recieved: $bytesRead');
             // If NOT a 1XX or 2XX status code, throw Exception.
-            final status = statusChecker(args[1], Pointer.fromAddress(args[4]),
-                100, 299, () => cronet.Cronet_UrlRequest_Cancel(reqPtr));
+            final status = statusChecker(statusCode, statusTextPtr, 100, 299,
+                () => cronet.Cronet_UrlRequest_Cancel(reqPtr));
             if (!status) {
               break;
             }
-            final data = cronet.Cronet_Buffer_GetData(buffer)
+            final data = cronet.Cronet_Buffer_GetData(bufferPtr)
                 .cast<Uint8>()
                 .asTypedList(bytesRead);
             _controller.sink.add(data.toList(growable: false));
-            final res = cronet.Cronet_UrlRequest_Read(request, buffer);
+            final res = cronet.Cronet_UrlRequest_Read(requestPtr, bufferPtr);
             if (res != Cronet_RESULT.Cronet_RESULT_SUCCESS) {
               cleanUpRequest(reqPtr, cleanUpClient);
               _controller.addError(UrlRequestError(res));
@@ -177,9 +271,21 @@ class CallbackHandler {
             }
           }
           break;
+        // When the request is succesfully done, we will shut down everything.
+        case 'OnSucceeded':
+          {
+            final Pointer<Cronet_UrlResponseInfo> infoPtr =
+                Pointer.fromAddress(args[1]);
+            _getNegotiatedProtocol(infoPtr);
+            cleanUpRequest(reqPtr, cleanUpClient);
+            _controller.close();
+            cronet.Cronet_UrlRequest_Destroy(reqPtr);
+          }
+          break;
         // In case of network error, we will shut down everything.
         case 'OnFailed':
           {
+            _resumeResponse();
             final errorStrPtr = Pointer.fromAddress(args[0]).cast<Utf8>();
             final error = errorStrPtr.toDartString();
             malloc.free(errorStrPtr);
@@ -192,14 +298,7 @@ class CallbackHandler {
         // When the request is cancelled, we will shut down everything.
         case 'OnCanceled':
           {
-            cleanUpRequest(reqPtr, cleanUpClient);
-            _controller.close();
-            cronet.Cronet_UrlRequest_Destroy(reqPtr);
-          }
-          break;
-        // When the request is succesfully done, we will shut down everything.
-        case 'OnSucceeded':
-          {
+            _resumeResponse();
             cleanUpRequest(reqPtr, cleanUpClient);
             _controller.close();
             cronet.Cronet_UrlRequest_Destroy(reqPtr);
@@ -245,5 +344,11 @@ class CallbackHandler {
     }, onError: (Object error) {
       log(error.toString());
     });
+  }
+
+  void _resumeResponse() {
+    if (!isResponseStarted.isCompleted) {
+      isResponseStarted.complete();
+    }
   }
 }

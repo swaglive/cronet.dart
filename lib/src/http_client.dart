@@ -3,8 +3,11 @@
 // BSD-style license that can be found in the LICENSE file.
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ffi';
 
+import 'package:cronet/src/model/dns_resolver_rule.dart';
+import 'package:cronet/src/wrapper/generated_bindings.dart';
 import 'package:ffi/ffi.dart';
 
 import 'enums.dart';
@@ -38,6 +41,7 @@ class HttpClient {
   final bool brotli;
   final String acceptLanguage;
   final List<QuicHint> quicHints;
+  final DnsResolverRules? dnsResolverRules;
 
   final Pointer<Cronet_Engine> _cronetEngine;
   // Keep all the request reference in a list so if the client is being
@@ -47,6 +51,8 @@ class HttpClient {
 
   static const int defaultHttpPort = 80;
   static const int defaultHttpsPort = 443;
+
+  Pointer<SampleExecutor> executor = wrapper.SampleExecutorCreate();
 
   /// Initiates an [HttpClient] with the settings provided in the arguments.
   ///
@@ -62,8 +68,10 @@ class HttpClient {
     this.quicHints = const [],
     this.brotli = true,
     this.acceptLanguage = 'en_US',
+    this.dnsResolverRules,
   }) : _cronetEngine = cronet.Cronet_Engine_Create() {
     if (_cronetEngine == nullptr) throw Error();
+    print('cronet engine pointer: ${_cronetEngine.address}');
     wrapper.RegisterHttpClient(this, _cronetEngine.cast());
     // Starting the engine with parameters.
     final engineParams = cronet.Cronet_EngineParams_Create();
@@ -104,6 +112,17 @@ class HttpClient {
     cronet.Cronet_EngineParams_accept_language_set(
         engineParams, acceptLanguage.toNativeUtf8().cast<Int8>());
 
+    if (dnsResolverRules != null) {
+      final Map<String, dynamic> rules = <String, dynamic>{
+        'HostResolverRules': {
+          'host_resolver_rules': dnsResolverRules!.toRules(),
+        }
+      };
+      final String rulesJson = jsonEncode(rules);
+      cronet.Cronet_EngineParams_experimental_options_set(
+          engineParams, rulesJson.toNativeUtf8().cast<Int8>());
+    }
+
     final res =
         cronet.Cronet_Engine_StartWithParams(_cronetEngine, engineParams);
     if (res != Cronet_RESULT.Cronet_RESULT_SUCCESS) {
@@ -114,6 +133,11 @@ class HttpClient {
 
   void _cleanUpRequests(HttpClientRequest hcr) {
     _requests.remove(hcr);
+    if (_stop && _requests.isEmpty) {
+      print('close cronet engine');
+      wrapper.SampleExecutorDestroy(executor);
+      cronet.Cronet_Engine_Shutdown(_cronetEngine);
+    }
   }
 
   /// Shuts down the [HttpClient].
@@ -125,7 +149,6 @@ class HttpClient {
   /// new connection after calling close, will throw an [Exception].
   void close({bool force = false}) {
     if (_stop) return;
-    _stop = true;
     if (force) {
       // Deep copying the list because the original list may get modified
       // during the traversal as cronet sends onCancel callbacks.
@@ -135,7 +158,9 @@ class HttpClient {
         request.callbackHandler.controller
             .addError(HttpException('HttpClient: Force Closed'));
       }
+      requests.clear();
     }
+    _stop = true;
   }
 
   /// Constructs [Uri] from [host], [port] & [path].
@@ -158,8 +183,9 @@ class HttpClient {
       if (_stop) {
         throw Exception("Client is closed. Can't open new connections");
       }
-      _requests.add(
-          HttpClientRequestImpl(url, method, _cronetEngine, _cleanUpRequests));
+
+      _requests.add(HttpClientRequestImpl(
+          url, method, _cronetEngine, _cleanUpRequests, executor));
       return _requests.last;
     });
   }

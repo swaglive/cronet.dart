@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.14)
 set(PROJECT_NAME "cronet")
 project(${PROJECT_NAME} LANGUAGES C CXX)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD 11)
 # not be changed
 set(PLUGIN_NAME "wrapper")
 
-if(NOT ( ANDROID AND IOS ))
+if(NOT ( ANDROID OR IOS ))
   add_compile_definitions(DART_SHARED_LIB)
 endif ()
 

@@ -8,4 +8,7 @@ export 'src/http_client.dart';
 export 'src/http_client_request.dart' hide HttpClientRequestImpl;
 export 'src/http_client_response.dart' hide HttpClientResponseImpl;
 export 'src/http_headers.dart' hide HttpHeadersImpl;
+export 'src/model/dns_resolver_rule.dart';
+export 'src/model/http_cookie.dart';
+export 'src/model/http_redirect_info.dart';
 export 'src/quic_hint.dart';

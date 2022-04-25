@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'cronet'
-  s.version          = '0.0.1'
+  s.version          = '0.0.2'
   s.summary          = 'A new flutter plugin project.'
   s.description      = <<-DESC
 A new flutter plugin project.
@@ -16,7 +16,7 @@ A new flutter plugin project.
   s.source_files = 'Classes/**/*', '../../*.{h,cc}'
   s.public_header_files = 'Classes/**/*.h', '../../src/*.h'
   s.dependency 'Flutter'
-  s.platform = :ios, '8.0'
+  s.platform = :ios, '9.0'
   
   s.vendored_libraries = 'lib/libwrapper.a'
   s.libraries = 'wrapper','c++','resolv'

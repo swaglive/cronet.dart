@@ -77,6 +77,23 @@ flutter pub run cronet:setup # Downloads the cronet binaries.
 flutter run
 ```
 
+Add the following code snippest in Podfile, if you use "use_frameworks!" in the Podfile
+
+```ruby
+pre_install do |installer|
+  installer.pod_targets.each do |pod|
+    if pod.name == 'cronet'
+      def pod.static_framework?;
+        true
+      end
+      def pod.build_type;
+        Pod::BuildType.static_library
+      end
+    end
+  end
+end
+```
+
 ### Dart CLI
 
 ```bash

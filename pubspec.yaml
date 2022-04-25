@@ -17,6 +17,7 @@ dependencies:
   args: ^2.1.1
   cli_util: ^0.3.3
   archive: ^3.1.2
+  equatable: ^2.0.3
 
 dev_dependencies:
   ffigen: ^2.4.2

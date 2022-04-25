@@ -8,6 +8,7 @@ import 'package:cronet/cronet.dart';
 
 /* Trying to re-impliment: https://chromium.googlesource.com/chromium/src/+/master/components/cronet/native/sample/main.cc */
 
+final stopwatch = Stopwatch();
 void main(List<String> args) {
   final stopwatch = Stopwatch()..start();
   final client = HttpClient();

@@ -16,6 +16,7 @@ import 'http_callback_handler.dart';
 import 'http_client_response.dart';
 import 'http_headers.dart';
 import 'third_party/cronet/generated_bindings.dart';
+import 'wrapper/generated_bindings.dart' as w;
 
 /// HTTP request for a client connection.
 ///
@@ -103,11 +104,14 @@ class HttpClientRequestImpl implements HttpClientRequest {
 
   /// Initiates a [HttpClientRequestImpl]. It is meant to be used by a
   /// [HttpClient].
-  HttpClientRequestImpl(
-      this._uri, this._method, this._cronetEngine, this._clientCleanup,
+  HttpClientRequestImpl(this._uri, this._method, this._cronetEngine,
+      this._clientCleanup, Pointer<w.SampleExecutor> executor,
       {this.encoding = utf8})
-      : _callbackHandler =
-            CallbackHandler(wrapper.SampleExecutorCreate(), ReceivePort()),
+      : _callbackHandler = CallbackHandler(
+          _method,
+          executor,
+          ReceivePort(),
+        ),
         _request = cronet.Cronet_UrlRequest_Create() {
     _headers = HttpHeadersImpl(_requestParams);
     // Register the native port to C side.
@@ -176,10 +180,11 @@ class HttpClientRequestImpl implements HttpClientRequest {
   /// server response. Throws [UrlRequestError] if request can't be initiated.
   @override
   Future<HttpClientResponse> close() {
-    return Future(() {
+    return Future(() async {
       _headers.isImmutable = isImmutable = true;
       _startRequest();
-      return HttpClientResponseImpl(_callbackHandler.stream);
+      await _callbackHandler.isResponseStarted.future;
+      return HttpClientResponseImpl(_callbackHandler);
     });
   }
 
@@ -273,4 +278,10 @@ class HttpClientRequestImpl implements HttpClientRequest {
 
   @override
   HttpHeaders get headers => _headers;
+
+  void cancel() {
+    if (_request != nullptr) {
+      cronet.Cronet_UrlRequest_Cancel(_request);
+    }
+  }
 }

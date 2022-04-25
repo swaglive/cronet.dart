@@ -143,7 +143,7 @@ void OnRedirectReceived(Cronet_UrlRequestCallbackPtr self,
   int statusCode = _Cronet_UrlResponseInfo_http_status_code_get(info);
   // If NOT a 3XX status code.
   DispatchCallback("OnRedirectReceived", request,
-                   CallbackArgBuilder(3, newLoc, statusCode,
+                   CallbackArgBuilder(4, newLoc, statusCode, info,
                                       statusText(info, statusCode, 300, 399)));
 }
 
@@ -157,7 +157,7 @@ void OnResponseStarted(Cronet_UrlRequestCallbackPtr self,
   int statusCode = _Cronet_UrlResponseInfo_http_status_code_get(info);
   // If NOT a 1XX or 2XX status code.
   DispatchCallback("OnResponseStarted", request,
-                   CallbackArgBuilder(3, statusCode, buffer,
+                   CallbackArgBuilder(4, statusCode, info, buffer,
                                       statusText(info, statusCode, 100, 299)));
 }
 
@@ -168,7 +168,7 @@ void OnReadCompleted(Cronet_UrlRequestCallbackPtr self,
   int statusCode = _Cronet_UrlResponseInfo_http_status_code_get(info);
   // If NOT a 1XX or 2XX status code.
   DispatchCallback("OnReadCompleted", request,
-                   CallbackArgBuilder(5, request, statusCode, buffer,
+                   CallbackArgBuilder(6, request, statusCode, info, buffer,
                                       bytes_read,
                                       statusText(info, statusCode, 100, 299)));
 }
@@ -176,7 +176,7 @@ void OnReadCompleted(Cronet_UrlRequestCallbackPtr self,
 void OnSucceeded(Cronet_UrlRequestCallbackPtr self,
                  Cronet_UrlRequestPtr request, Cronet_UrlResponseInfoPtr info) {
   int statusCode = _Cronet_UrlResponseInfo_http_status_code_get(info);
-  DispatchCallback("OnSucceeded", request, CallbackArgBuilder(1, statusCode));
+  DispatchCallback("OnSucceeded", request, CallbackArgBuilder(2, statusCode, info));
 }
 
 void OnFailed(Cronet_UrlRequestCallbackPtr self, Cronet_UrlRequestPtr request,
@@ -185,12 +185,12 @@ void OnFailed(Cronet_UrlRequestCallbackPtr self, Cronet_UrlRequestPtr request,
   size_t len = strlen(errStr);
   char *dupStr = (char *)malloc(len + 1);
   memcpy(dupStr, errStr, len + 1);
-  DispatchCallback("OnFailed", request, CallbackArgBuilder(1, dupStr));
+  DispatchCallback("OnFailed", request, CallbackArgBuilder(2, dupStr, info));
 }
 
 void OnCanceled(Cronet_UrlRequestCallbackPtr self, Cronet_UrlRequestPtr request,
                 Cronet_UrlResponseInfoPtr info) {
-  DispatchCallback("OnCanceled", request, CallbackArgBuilder(0));
+  DispatchCallback("OnCanceled", request, CallbackArgBuilder(1, info));
 }
 
 // Creates a SampleExecutor Object.

@@ -227,6 +227,20 @@ void verifyCronetBinary() {
 
 // Available Commands.
 
+class AndroidCommand extends Command<void> {
+  @override
+  String get description => 'Download Android cronet binaries and '
+      'builds the wrapper binaries. Requires cmake.';
+
+  @override
+  String get name => 'android';
+
+  @override
+  void run() {
+    downloadCronetBinaries('android');
+  }
+}
+
 class BuildCommand extends Command<void> {
   @override
   String get description => 'Builds the wrapper binaries. Requires cmake.';
@@ -271,6 +285,7 @@ Future<void> main(List<String> args) async {
   final runner =
       CommandRunner<void>('setup', 'Downloads/Builds the cronet binaries.');
   runner
+    ..addCommand(AndroidCommand())
     ..addCommand(BuildCommand())
     ..addCommand(CleanCommand())
     ..addCommand(VerifyCommand());

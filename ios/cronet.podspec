@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'cronet'
-  s.version          = '0.0.2'
+  s.version          = '0.0.3'
   s.summary          = 'A new flutter plugin project.'
   s.description      = <<-DESC
 A new flutter plugin project.
@@ -22,8 +22,11 @@ A new flutter plugin project.
   s.libraries = 'wrapper','c++','resolv'
 
   s.dependency 'Cronet', '~> 86.0.4240.93'
-  s.user_target_xcconfig = { 'OTHER_LDFLAGS' => '-framework Cronet -ObjC -all_load' }
+  s.user_target_xcconfig = { 
+    'OTHER_LDFLAGS' => '-framework Cronet -ObjC -all_load',
+  }
 
   # Flutter.framework does not contain a i386 slice.
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386' }
+  
 end

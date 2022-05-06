@@ -8,7 +8,7 @@
 #if defined(WIN32)
 #define WRAPPER_EXPORT __declspec(dllexport)
 #else
-#define WRAPPER_EXPORT __attribute__((visibility("default")))
+#define WRAPPER_EXPORT __attribute__((visibility("default"))) __attribute__((used))
 #endif
 
 #endif  // WRAPPER_EXPORT_H_

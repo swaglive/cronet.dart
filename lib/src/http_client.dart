@@ -71,7 +71,6 @@ class HttpClient {
     this.dnsResolverRules,
   }) : _cronetEngine = cronet.Cronet_Engine_Create() {
     if (_cronetEngine == nullptr) throw Error();
-    print('cronet engine pointer: ${_cronetEngine.address}');
     wrapper.RegisterHttpClient(this, _cronetEngine.cast());
     // Starting the engine with parameters.
     final engineParams = cronet.Cronet_EngineParams_Create();
@@ -134,7 +133,6 @@ class HttpClient {
   void _cleanUpRequests(HttpClientRequest hcr) {
     _requests.remove(hcr);
     if (_stop && _requests.isEmpty) {
-      print('close cronet engine');
       wrapper.SampleExecutorDestroy(executor);
       cronet.Cronet_Engine_Shutdown(_cronetEngine);
     }

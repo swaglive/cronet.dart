@@ -17,6 +17,7 @@ A new flutter plugin project.
   s.public_header_files = 'Classes/**/*.h', '../../src/*.h'
   s.dependency 'Flutter'
   s.platform = :ios, '9.0'
+  s.swift_version = '5.0'
   
   s.vendored_libraries = 'lib/libwrapper.a'
   s.libraries = 'wrapper','c++','resolv'

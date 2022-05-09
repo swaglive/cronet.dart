@@ -1,5 +1,5 @@
 PODS:
-  - cronet (0.0.2):
+  - cronet (0.0.3):
     - Cronet (~> 86.0.4240.93)
     - Flutter
   - Cronet (86.0.4240.93)
@@ -21,9 +21,9 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   Cronet: 393245d1d0e75276f55cf7294cd03d09324d8441
-  cronet: 740ab7c662fa3e689aa2da37803f314934edebbc
+  cronet: 1ba53d4d5669f46c6c3a344425c3c04fb4b90436
   Flutter: 50d75fe2f02b26cc09d224853bb45737f8b3214a
 
-PODFILE CHECKSUM: 6e45aead80559a777d8545fcf3a7eac4ba073faf
+PODFILE CHECKSUM: 610f0ceba999022c7002d788d863e7dbaec46ac1
 
 COCOAPODS: 1.11.3
